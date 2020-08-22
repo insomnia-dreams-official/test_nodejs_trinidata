@@ -8,13 +8,14 @@ export async function main() {
   const tree = await createTree(treeName, treePaths)
   parentPort.postMessage(tree);
 }
+
 main()
 
 /**
  * Функция для сборки дерева по заданному идентификатору
  * @param treeName идентификатор дерева
  */
-async function createTree(treeName: string, treePaths): Promise<TreeWithMetadataInterface> {
+async function createTree(treeName: string, treePaths: Record<string, string>): Promise<TreeWithMetadataInterface> {
   const treePath = treePaths[treeName]
   // проверяем существование файла
   if (!fs.existsSync(treePath)) {

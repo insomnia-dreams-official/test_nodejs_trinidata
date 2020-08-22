@@ -3,7 +3,6 @@ import * as bodyParser from 'body-parser'
 import * as path from "path"
 import {TreeCash} from "./cash"
 import {createWorker} from "./utils/create-worker";
-import {log} from "util";
 
 /**
  * Переменные проекта
@@ -50,41 +49,3 @@ app.post('/tree', async (req, res) => {
  * Запускаем http server
  */
 app.listen(PORT, () => console.log(`⚡️[server]: Server is running at https://localhost:${PORT}`))
-
-// async function getData(urls) {
-//   const promises = []
-//   urls.forEach(url => {
-//     promises.push(
-//       // привел пример со сторонней библиотекой, нативные методы не так коротки
-//       axios.get(url)
-//         .then(r => r)
-//         .catch(e => e)
-//     )
-//   })
-//   const data = await Promise.all(promises)
-//   // Здесь сделано допущение, что мы получили все данные правильно,
-//   // в зависимости от http ответов на ошибки, и того как мы хотим их отобразить в результирующем объекте
-//   // можно было бы дописать что-то еще
-//   return Object.fromEntries(urls.map((url, idx) => [url, data[idx].status === 200 ? data[idx] : 'данные не были получены']))
-// }
-
-
-function fn(obj) {
-  const someProp = obj.someProp
-  return new Promise((resolve, reject) => {
-    reject(someProp)
-  })
-}
-
-async function asyncFn(obj) {
-  const someProp = obj.someProp
-  return Promise.reject(someProp)
-}
-
-(async ()=>{
-  const o = {}
-  await asyncFn(o).catch(err => console.error('Catched')) // => 'Catched'
-  await fn(o).catch(err => console.error('Catched')) // => TypeError: Cannot read property 'someProp' of undefined
-})()
-
-

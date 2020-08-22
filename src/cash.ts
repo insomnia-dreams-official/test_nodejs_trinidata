@@ -59,7 +59,7 @@ export class TreeCash {
 
   /**
    * Метод возвращает кусочек нужного нам дерева с заданного элемента
-   * @param treeName закешированное дерево
+   * @param treeName идентификатор дерева
    * @param id идентификатор элемента, с которого начинаем строить дерево
    * Пример:
    * {
@@ -75,8 +75,9 @@ export class TreeCash {
   }
 
   /**
-   * Возвращает true, если файл был обновлен после создания кэша
-   * @param treeName название дерева
+   * Метод возвращает true, если файл был обновлен после создания кэша
+   * ***(при первом запуске тоже вернет true) currentFileUpdateDate > null это равенство всегда соблюдается
+   * @param treeName идентификатор дерева
    */
   public isFileModified(treeName: string): boolean {
     // получаем дату обновления файла
@@ -86,6 +87,19 @@ export class TreeCash {
     return currentFileUpdateDate > fileUpdateDate
   }
 
+  /**
+   * Метод возвращает кусочек нужного нам дерева с заданного элемента
+   * @param treeName идентификатор дерева
+   * @param id идентификатор элемента, с которого начинаем строить дерево
+   * Пример:
+   * {
+   *    id: '4',
+   *    name: 'мыло жидкое “help”',
+   *    children: [
+   *      { id: '5', name: 'мыло жидкое “help” для мужчин', children: null },
+   *    ]
+   *  }
+   */
   public async createTree(treeName: string, id: string): Promise<TreeInterface> {
     const treePath = this.trees[treeName].path
     // проверяем существование файла (бесшумно)
@@ -103,7 +117,7 @@ export class TreeCash {
     // @@@
 
     const cash = {}
-    return await new Promise(((resolve, reject) => {
+    return new Promise(((resolve, reject) => {
         // создаем стрим по файлу
         fs.createReadStream(treePath)
           // обрабатываем его csv-parser для получения объектов
@@ -164,10 +178,18 @@ export class TreeCash {
     this.trees[treeName] = tree
   }
 
+  /**
+   * Метод говорит нам, запущен ли в текущий момент воркер на обновление кэша дерева
+   * @param treeName идентификатор дерева
+   */
   public isUpdating(treeName: string): boolean {
     return this.trees[treeName].isUpdating
   }
 
+  /**
+   * Метод проставляет флаг, сигнализирующий о запуске воркера на обновление кэша дерева
+   * @param treeName идентификатор дерева
+   */
   public setUpdatingFlag(treeName: string): void {
     this.trees[treeName].isUpdating = true
   }
