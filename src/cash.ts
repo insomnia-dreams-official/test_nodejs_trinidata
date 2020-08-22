@@ -47,13 +47,13 @@ export class TreeCash {
   constructor(options: OptionsInterface) {
     this.trees = {}
     // проинициализируем деревья
-    for (const treePath in options.paths) {
-      const treeName = path.basename(treePath, '.csv');
+    for (const treeName in options.paths) {
+      //const treeName = path.basename(treePath, '.csv');
       this.trees[treeName] = {
         fileUpdateDate: null,
         cashUpdateDate: null,
         isUpdating: false,
-        path: treePath,
+        path: options.paths[treeName],
         cash: {},
       }
     }
@@ -77,7 +77,7 @@ export class TreeCash {
    *    ]
    *  }
    */
-  public getCashedTreeElement(treeName: string, id: string): TreeInterface {
+  public getCashedTree(treeName: string, id: string): TreeInterface {
     return this.trees[treeName]?.cash[id]
   }
 
@@ -93,7 +93,7 @@ export class TreeCash {
     return currentFileUpdateDate > fileUpdateDate
   }
 
-  public async getTreeElement(treeName: string, id: string): Promise<TreeInterface> {
+  public async createTree(treeName: string, id: string): Promise<TreeInterface> {
     const treePath = this.trees[treeName].path
     // проверяем существование файла (бесшумно)
     if (!fs.existsSync(treePath)) return null
@@ -109,28 +109,57 @@ export class TreeCash {
     // В противном случае мы просто обратимся к несуществующему ключу (undefined).
     // @@@
 
-    const element = {id}
-    await new Promise(((resolve, reject) => {
-      // создаем стрим по файлу
-      fs.createReadStream(treePath)
-        // обрабатываем его csv-parser для получения объектов
-        .pipe(csv())
-        .on('data', (data: CsvData): void => {
-          // мы пропускаем id меньшие заданного, имея в виду допущение про отсортированность данных
-          if (data.id > id) {
+    const cash = {}
+    return await new Promise(((resolve, reject) => {
+        // создаем стрим по файлу
+        fs.createReadStream(treePath)
+          // обрабатываем его csv-parser для получения объектов
+          .pipe(csv())
+          .on('data', (data: CsvData): void => {
+            if (Number(data.id) === Number(id)) {
+              const element = {
+                id: data.id,
+                name: data.name,
+                children: null
+              }
+              cash[id] = element
+            }
+            if (Number(data.id) > Number(id) && Number(data.parent) >= Number(id)) {
+              const element = {
+                id: data.id,
+                name: data.name,
+                children: null
+              }
+              // пишем элемент в кэш
+              cash[data.id] = element
 
-          }
-        })
-        .on('end', () => {
-          resolve()
-        })
-        .on('error', error => {
-          reject(error)
-        })
-    }))
-      .catch(error => {
-        console.log(`Ошибка. Система не смогла собрать кэш для файла ${treeName}.`, error)
-      })
+              // проверяем есть ли у элемента родители
+              // @@@ Вторым условием проверяем записан ли родитель в кэш, если уверены в csv файлах, его можно не проверять.
+              // Я имею в виду допущение про отфильтрованность, описанное выше.@@@
+              if (data.parent && cash[data.parent]) {
+                // находим ссылку на родительский элемент
+                const parentElement = cash[data.parent]
+                // закидываем текущий элемент в родительский массив
+                if (!Array.isArray(parentElement.children)) {
+                  // создаем новый массив
+                  parentElement.children = [element]
+                } else {
+                  // добавляем в массив с уже добавленными детьми
+                  parentElement.children.push(element)
+                }
+                // @@@вложенных проверок можно было бы избежать, если в "листьях" можно было бы хранить пустой массив,
+                //а не null@@@
+              }
+            }
+          })
+          .on('end', () => {
+            resolve(cash[id])
+          })
+          .on('error', error => {
+            reject(null)
+          })
+      }
+    ))
   }
 
   /**

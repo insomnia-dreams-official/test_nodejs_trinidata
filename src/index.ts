@@ -29,19 +29,19 @@ app.use(bodyParser.json());
  */
 export const treeCash = new TreeCash({paths: treePaths})
 
-app.post('/tree', (req, res) => {
-  const {tree, id} = req.body
+app.post('/tree', async (req, res) => {
+  const {tree: treeName, id} = req.body
   // пытаемся получить данные из кэша
-  const element = treeCash.getCashedTreeElement(tree, id)
-  if (element && !treeCash.isFileModified(tree)) {
+  const element = treeCash.getCashedTree(treeName, id)
+  if (element && !treeCash.isFileModified(treeName)) {
     // данные получены из кэша, возвращаем их
     res.json(element)
   } else {
     // данных не были получены, создаем воркер для кэширования дерева
-    createWorker(tree)
+    createWorker(treeName)
     // собираем дерево "на лету"
-    console.log(appState)
-    res.json({tree: {}})
+    const tree = await treeCash.createTree(treeName, id)
+    res.json(tree)
   }
 })
 
