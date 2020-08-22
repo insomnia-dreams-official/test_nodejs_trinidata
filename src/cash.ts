@@ -1,4 +1,3 @@
-import * as path from 'path'
 import * as fs from 'fs'
 import * as csv from 'csv-parser'
 
@@ -46,9 +45,8 @@ export class TreeCash {
 
   constructor(options: OptionsInterface) {
     this.trees = {}
-    // проинициализируем деревья
+    // проинициализируем деревья и их метаданные
     for (const treeName in options.paths) {
-      //const treeName = path.basename(treePath, '.csv');
       this.trees[treeName] = {
         fileUpdateDate: null,
         cashUpdateDate: null,
@@ -69,11 +67,6 @@ export class TreeCash {
    *    name: 'мыло жидкое “help”',
    *    children: [
    *      { id: '5', name: 'мыло жидкое “help” для мужчин', children: null },
-   *      {
-   *        id: '6',
-   *        name: 'мыло жидкое “help” для женщин',
-   *        children: [Array]
-   *      }
    *    ]
    *  }
    */
