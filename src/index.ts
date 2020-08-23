@@ -1,8 +1,9 @@
-import * as express from 'express'
-import * as bodyParser from 'body-parser'
+import * as fs from "fs"
+import * as express from "express"
+import * as bodyParser from "body-parser"
 import * as path from "path"
-import {TreeCash} from "./cash"
-import {createWorker} from "./utils/create-worker";
+import {TreeCash} from "./tree-cash"
+import {createWorker} from "./utils/create-worker"
 
 /**
  * Переменные проекта
@@ -31,17 +32,46 @@ export const treeCash = new TreeCash({paths: treePaths})
 
 app.post('/tree', async (req, res) => {
   const {tree: treeName, id} = req.body
+
+  // такое надо проверять, чем нибудь вроде joy, но не будем переусложнять тестовый проект
+  if (isNaN(id)) {
+    return res.json({
+      error: `Ошибка. Поле id должно быть числом, получено "${id}"`
+    })
+  }
+
+  // проверяем существование файла (в принципе такие проверки можно выносить в мидлы, если их много (проверок))
+  if (!fs.existsSync(treePaths[treeName])) {
+    return res.json({
+      error: `Ошибка. Система не смогла собрать кэш для файла "${treeName}.csv", потому что такого файла не существует`
+    })
+  }
+
   // пытаемся получить данные из кэша
-  const element = treeCash.getCashedTree(treeName, id)
-  if (element && !treeCash.isFileModified(treeName)) {
+  const cashedTree = treeCash.getCashedTree(treeName)
+  /**
+   * Почему мы получаем все дерево, а не ветку? Если идентификатор id будет out of range
+   * мы будем получать cashedTree=undefined, и запускать воркер. Хотя фактически дерево уже закэшированно.
+   */
+  if (cashedTree && !treeCash.isFileModified(treeName)) {
     // данные получены из кэша, возвращаем их
-    res.json(element)
+    console.log(`Данные получены из кэша для ${treeName}`) // дебаговые логи
+    res.json(
+      cashedTree[id] ?
+        {tree: cashedTree[id]} :
+        {error: `Ошибка. Идентификатора "${id}" для дерева "${treeName}" не существует.`}
+    )
   } else {
     // данных не были получены, создаем воркер для кэширования дерева
     createWorker(treeName)
     // собираем дерево "на лету"
-    const tree = await treeCash.createTree(treeName, id)
-    res.json(tree)
+    const treeBranch = await treeCash.createTreeBranch(treeName, id)
+    console.log(`Данные собраны на лету для ${treeName}`) // дебаговые логи
+    res.json(
+      treeBranch ?
+        {tree: treeBranch} :
+        {error: `Ошибка. Идентификатора "${id}" для дерева "${treeName}" не существует.`}
+    )
   }
 })
 

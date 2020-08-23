@@ -33,12 +33,8 @@ interface TreesInterface {
 
 /**
  * Класс для кэширования деревьев из csv файлов.
- * Принимает массив из путей файлов и создает структуру TreeInterface для каждого из них.
- * Обратиться к данной структуре можно через имя, которое совпадает с последней частью переданного пути (без расширения).
- *  Пример:
- *  trees.tree1 <-- тут будет храниться кэш и метаинформация
- * @@@ Не стал делать эти структуры через литералы, ведь деревьев может быть и миллион.
- * Для инициализации сделаем метод updateCash, он будет пробегать по путям из конструктора и обновлять объект trees
+ * При инициализации создает структуру TreeWithMetadataInterface для каждого дерева,
+ * она нужна нам для хранения метаинформации по файлам и воркерам.
  */
 export class TreeCash {
   private readonly trees: TreesInterface;
@@ -48,34 +44,25 @@ export class TreeCash {
     // проинициализируем деревья и их метаданные
     for (const treeName in options.paths) {
       this.trees[treeName] = {
-        fileUpdateDate: null,
-        cashUpdateDate: null,
-        isUpdating: false,
-        path: options.paths[treeName],
-        cash: {},
+        fileUpdateDate: null, // дата обновления файла
+        cashUpdateDate: null, // дата последнего отработавшего воркера
+        isUpdating: false,    // флаг показывающий, работает ли воркер в данный момент
+        path: options.paths[treeName], // путь к файлу
+        cash: null,           // закэшированный объект дерева
       }
     }
   }
 
   /**
-   * Метод возвращает кусочек нужного нам дерева с заданного элемента
+   * Метод возвращает закэшированное дерево
    * @param treeName идентификатор дерева
-   * @param id идентификатор элемента, с которого начинаем строить дерево
-   * Пример:
-   * {
-   *    id: '4',
-   *    name: 'мыло жидкое “help”',
-   *    children: [
-   *      { id: '5', name: 'мыло жидкое “help” для мужчин', children: null },
-   *    ]
-   *  }
    */
-  public getCashedTree(treeName: string, id: string): TreeInterface {
-    return this.trees[treeName]?.cash[id]
+  public getCashedTree(treeName: string): any {
+    return this.trees[treeName].cash
   }
 
   /**
-   * Метод возвращает true, если файл был обновлен после создания кэша
+   * Метод возвращает true, если файл был обновлен после создания кэша на него
    * ***(при первом запуске тоже вернет true) currentFileUpdateDate > null это равенство всегда соблюдается
    * @param treeName идентификатор дерева
    */
@@ -91,21 +78,10 @@ export class TreeCash {
    * Метод возвращает кусочек нужного нам дерева с заданного элемента
    * @param treeName идентификатор дерева
    * @param id идентификатор элемента, с которого начинаем строить дерево
-   * Пример:
-   * {
-   *    id: '4',
-   *    name: 'мыло жидкое “help”',
-   *    children: [
-   *      { id: '5', name: 'мыло жидкое “help” для мужчин', children: null },
-   *    ]
-   *  }
    */
-  public async createTree(treeName: string, id: string): Promise<TreeInterface> {
+  public async createTreeBranch(treeName: string, id: string): Promise<TreeInterface> {
     const treePath = this.trees[treeName].path
-    // проверяем существование файла (бесшумно)
-    if (!fs.existsSync(treePath)) return null
 
-    // запускаем стрим по csv файлу (не будем закидывать его в память полностью, он может быть гигабайтным)
     // @@@
     // Допущением является то, что записи отфильтрованы в csv файле, это значит чтобы
     // собрать дерево нам понадобится только один проход. Если они не отфильтрованы,
@@ -117,12 +93,13 @@ export class TreeCash {
     // @@@
 
     const cash = {}
-    return new Promise(((resolve, reject) => {
-        // создаем стрим по файлу
+    return new Promise(((resolve) => {
+        // запускаем стрим по csv файлу
         fs.createReadStream(treePath)
           // обрабатываем его csv-parser для получения объектов
           .pipe(csv())
           .on('data', (data: CsvData): void => {
+            // создаем корневой элемент
             if (Number(data.id) === Number(id)) {
               const element = {
                 id: data.id,
@@ -131,7 +108,15 @@ export class TreeCash {
               }
               cash[id] = element
             }
+            // создаем потомков заданного элемента
             if (Number(data.id) > Number(id) && Number(data.parent) >= Number(id)) {
+              /**
+               * Обычно такие условия взрывают мозги, поэтому объясню, что я имел в виду.
+               * 1) Number(data.id) > Number(id) -> data.id потомка всегда будет больше заданного (id).
+               * 2) Number(data.parent) >= Number(id) -> у потомков data.parent будет равен id (его прямые дети),
+               * либо будет больше заданного это дети его детей
+               * @@@ разумеется, если записи в csv файле будут в случайном порядке, то такой подход не будет работать @@@
+               */
               const element = {
                 id: data.id,
                 name: data.name,
@@ -155,7 +140,7 @@ export class TreeCash {
                   parentElement.children.push(element)
                 }
                 // @@@вложенных проверок можно было бы избежать, если в "листьях" можно было бы хранить пустой массив,
-                //а не null@@@
+                // а не null@@@
               }
             }
           })
@@ -163,7 +148,8 @@ export class TreeCash {
             resolve(cash[id])
           })
           .on('error', error => {
-            reject(null)
+            console.log(`Ошибка. При создании дерева ${treeName}`, error)
+            resolve(null)
           })
       }
     ))
@@ -189,9 +175,10 @@ export class TreeCash {
   /**
    * Метод проставляет флаг, сигнализирующий о запуске воркера на обновление кэша дерева
    * @param treeName идентификатор дерева
+   * @param value значение
    */
-  public setUpdatingFlag(treeName: string): void {
-    this.trees[treeName].isUpdating = true
+  public setUpdatingFlag(treeName: string, value: boolean): void {
+    this.trees[treeName].isUpdating = value
   }
 }
 

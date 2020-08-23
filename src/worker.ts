@@ -1,29 +1,25 @@
-import {parentPort, workerData} from 'worker_threads';
-import * as fs from "fs";
-import * as csv from "csv-parser";
-import {CsvData, TreeWithMetadataInterface} from "./cash";
+import {parentPort, workerData} from "worker_threads"
+import * as fs from "fs"
+import * as csv from "csv-parser"
+import {CsvData, TreeWithMetadataInterface} from "./tree-cash"
 
-export async function main() {
+(async () => {
   const {treeName, treePaths} = workerData
+  // создаем дерево
   const tree = await createTree(treeName, treePaths)
+  // отправляем дерево в главный процесс для кэширования
   parentPort.postMessage(tree);
-}
-
-main()
+})()
 
 /**
- * Функция для сборки дерева по заданному идентификатору
+ * Функция для сборки дерева по заданному идентификатору (название файла)
  * @param treeName идентификатор дерева
  */
 async function createTree(treeName: string, treePaths: Record<string, string>): Promise<TreeWithMetadataInterface> {
   const treePath = treePaths[treeName]
-  // проверяем существование файла
-  if (!fs.existsSync(treePath)) {
-    console.log(`Ошибка. Система не смогла собрать кэш для файла ${treeName}.csv, потому что его не существует`)
-    return null
-  }
 
-  console.log(`Система собирает кэш для дерева ${treePath}`)
+  console.log(`Система собирает кэш для дерева ${treeName}`)
+
   const tree = {
     fileUpdateDate: fs.statSync(treePath).mtime,
     cashUpdateDate: null, // заполняем при в exit коллбэке
@@ -31,19 +27,19 @@ async function createTree(treeName: string, treePaths: Record<string, string>): 
     path: treePath,
     cash: {},
   }
-  // запускаем стрим по csv файлу (не будем закидывать его в память полностью)
+
   // @@@
   // Допущением является то, что записи отфильтрованы в csv файле, это значит чтобы
-  // собрать дерево нам понадобится только один проход. Если они не отфильтрованы,
+  // собрать дерево нам понадобится сделать только один проход по файлу. Если они не отфильтрованы,
   // то либо нужно грузить все в оперативную память и фильтровать;
-  // либо грузиться все в какое-то хранилище (mongo/postgres) и фильтровать там.
+  // либо использовать какое-то хранилище (mongo/postgres) и фильтровать там.
   // Под "фильтрованностью" понимается то, что когда мы читаем запись из csv файла все ее родители
   // уже записаны нами в кэш, и мы просто добавляем ее как "лист" дерева.
   // В противном случае мы просто обратимся к несуществующему ключу (undefined).
   // @@@
 
-  return await new Promise(((resolve) => {
-    // создаем стрим по файлу
+  return new Promise(((resolve) => {
+    // запускаем стрим по csv файлу
     fs.createReadStream(treePath)
       // обрабатываем его csv-parser для получения объектов
       .pipe(csv())
@@ -71,11 +67,12 @@ async function createTree(treeName: string, treePaths: Record<string, string>): 
             // добавляем в массив с уже добавленными детьми
             parentElement.children.push(element)
           }
-          // @@@вложенных проверок можно было бы избежать, если в "листьях" можно было бы хранить пустой массив,
-          //а не null@@@
+          // @@@вложенной провероки (!Array.isArray) можно было бы избежать,
+          // если в "листьях" можно было бы хранить пустой массив, а не null@@@
         }
       })
       .on('end', () => {
+        // устанавливаем дату сборки кэша
         tree.cashUpdateDate = new Date()
         resolve(tree)
       })
